@@ -120,12 +120,10 @@ func (m *MetaObject) SaveMeta() {
 	}
 
 	json_dump, _ := json.Marshal(m)
-	log.Printf("Saving Meta %v\n", string(json_dump))
-	n, e := f.Write(json_dump)
+	log.Printf("Saving Meta\n")
+	_, e := f.Write(json_dump)
 	if e != nil {
 		fmt.Println(e)
-	} else {
-		fmt.Println(n)
 	}
 	f.Close()
 }
@@ -168,12 +166,14 @@ func sync(api_response []byte) {
 	if jsonErr != nil {
 		log.Fatal("unable to parse JSON data")
 		log.Fatal(jsonErr)
-		panic("exit process")
+		panic("bad sync data")
 	}
 
 	err := create_dirs()
 	if err != nil {
-		panic(fmt.Errorf("unable to create app dirs: %w", err))
+		log.Fatal("unable to create app dirs")
+		log.Fatal(err)
+		panic("filesystem error")
 	}
 
 	log.Printf("Sync content for %v with %v stories\n", sync_data.SiteName, len(sync_data.Stories))
