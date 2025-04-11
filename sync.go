@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -36,6 +37,15 @@ type SiteData struct {
 	HomepageUrl string  `json:"homepage_url"`
 	Stories     []Story `json:"stories"`
 	ErrorPage   string  `json:"error_page"`
+}
+
+type MetaObject struct {
+	Title       string    `json:"title"`
+	Entity      string    `json:"entity"`
+	HomepageUrl string    `json:"homepage_url"`
+	Stories     []Story   `json:"stories"`
+	Checksum    string    `json:"checksum"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 func fetch_local() ([]byte, error) {
@@ -92,6 +102,98 @@ func fetch_remote(url, token string) ([]byte, error) {
 	return body, nil
 }
 
+func (m *MetaObject) SetChecksum(data []byte) {
+	h := sha256.New()
+	h.Write(data)
+	m.Checksum = fmt.Sprintf("%x", h.Sum(nil))
+	log.Printf("Content Checksum: %x\n", m.Checksum)
+
+	m.UpdatedAt = time.Now()
+	log.Printf("Meta Updated: %v\n", m.UpdatedAt)
+}
+
+func (m *MetaObject) SaveMeta() {
+
+	f, err := os.OpenFile(viper.GetString("MetaPath"), os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil {
+		log.Printf("! Unable to open %v for writing\n", viper.GetString("MetaPath"))
+	}
+
+	json_dump, _ := json.Marshal(m)
+	log.Printf("Saving Meta %v\n", string(json_dump))
+	n, e := f.Write(json_dump)
+	if e != nil {
+		fmt.Println(e)
+	} else {
+		fmt.Println(n)
+	}
+	f.Close()
+}
+
+func (s *Story) SaveFile() {
+
+	filepath := fmt.Sprintf("%v/%v", viper.GetString("ContentDir"), s.Anchor)
+	f, err := os.OpenFile(filepath, os.O_CREATE, 0666)
+	if err != nil {
+		log.Printf("! Unable to open path %v for writing\n", filepath)
+	}
+
+	log.Printf("Saving %v content in %v\n", s.Title, s.Anchor)
+	f.WriteString(s.Content)
+	f.Close()
+
+}
+
+func create_dirs() error {
+
+	content_dir_err := os.MkdirAll(viper.GetString("ContentDir"), 0755)
+	if content_dir_err != nil {
+		return content_dir_err
+	}
+
+	bin_dir_err := os.MkdirAll(viper.GetString("BinDir"), 0755)
+	if bin_dir_err != nil {
+		return bin_dir_err
+	}
+
+	return nil
+
+}
+
+func sync(api_response []byte) {
+
+	sync_data := SiteData{}
+	jsonErr := json.Unmarshal(api_response, &sync_data)
+
+	if jsonErr != nil {
+		log.Fatal("unable to parse JSON data")
+		log.Fatal(jsonErr)
+		panic("exit process")
+	}
+
+	err := create_dirs()
+	if err != nil {
+		panic(fmt.Errorf("unable to create app dirs: %w", err))
+	}
+
+	log.Printf("Sync content for %v with %v stories\n", sync_data.SiteName, len(sync_data.Stories))
+
+	meta_object := MetaObject{
+		Title:       sync_data.Title,
+		Entity:      sync_data.Entity,
+		HomepageUrl: sync_data.HomepageUrl,
+	}
+
+	meta_object.SetChecksum(api_response)
+
+	for _, story := range sync_data.Stories {
+		story.SaveFile()
+	}
+
+	meta_object.SaveMeta()
+
+}
+
 func main() {
 
 	log.SetPrefix("nrtk-sync: ")
@@ -100,6 +202,11 @@ func main() {
 	viper.SetConfigName(".env")
 	viper.SetConfigType("env")
 	viper.AddConfigPath(".")
+
+	viper.SetDefault("AppDir", ".nrtk/")
+	viper.SetDefault("ContentDir", viper.GetString("AppDir")+"www/")
+	viper.SetDefault("BinDir", viper.GetString("AppDir")+"bin/")
+	viper.SetDefault("MetaPath", viper.GetString("AppDir")+"meta.json")
 
 	err := viper.ReadInConfig()
 	if err != nil {
@@ -119,17 +226,7 @@ func main() {
 		log.Fatal(fetchError)
 
 	} else {
-
-		api_response_data := SiteData{}
-		jsonErr := json.Unmarshal(api_response, &api_response_data)
-
-		if jsonErr != nil {
-			log.Fatal("unable to parse JSON data")
-			log.Fatal(jsonErr)
-		} else {
-			log.Printf("Sync content for %v\n", api_response_data.SiteName)
-		}
-
+		sync(api_response)
 	}
 
 }
