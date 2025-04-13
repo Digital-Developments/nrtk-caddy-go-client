@@ -142,8 +142,6 @@ func (m *MetaObject) SetChecksum(data []byte) {
 	h := sha256.New()
 	h.Write(data)
 	m.Checksum = fmt.Sprintf("%x", h.Sum(nil))
-	log.Printf("Content Checksum: %v\n", m.Checksum)
-
 	m.UpdatedAt = time.Now()
 }
 
@@ -240,8 +238,6 @@ func sync(api_response []byte) {
 		panic("unable to create app dirs")
 	}
 
-	log.Printf("Sync content for %v with %v stories\n", sync_data.SiteName, len(sync_data.Stories))
-
 	meta_object := MetaObject{
 		Title:       sync_data.Title,
 		Entity:      sync_data.Entity,
@@ -251,11 +247,11 @@ func sync(api_response []byte) {
 
 	meta_object.SetChecksum(api_response)
 
-	result, err := meta_object.IsUpdateNeeded()
+	result, _ := meta_object.IsUpdateNeeded()
 
 	if result || viper.GetBool("IS_FORCE_UPDATE") {
 
-		log.Printf("Update detected (IS_FORCE_UPDATE=%v)", viper.GetBool("IS_FORCE_UPDATE"))
+		log.Printf("Sync content for %v with %v stories (IS_FORCE_UPDATE=%v)\n", sync_data.SiteName, len(sync_data.Stories), viper.GetBool("IS_FORCE_UPDATE"))
 
 		SaveFile(meta_object)
 
@@ -284,6 +280,23 @@ func sync(api_response []byte) {
 
 }
 
+func run() {
+	var api_response []byte
+	var fetchError error
+
+	if viper.GetBool("IS_REMOTE") {
+		api_response, fetchError = fetch_remote(viper.GetString("NRTK_API_URL"), viper.GetString("NRTK_API_TOKEN"))
+	} else {
+		api_response, fetchError = readJSONFile("local.json")
+	}
+
+	if fetchError != nil {
+		panic(fetchError)
+	} else {
+		sync(api_response)
+	}
+}
+
 func main() {
 
 	log.SetPrefix("nrtk-sync: ")
@@ -304,19 +317,15 @@ func main() {
 		panic(fmt.Errorf("fatal error config file: %w", err))
 	}
 
-	var api_response []byte
-	var fetchError error
-
-	if viper.GetBool("IS_REMOTE") {
-		api_response, fetchError = fetch_remote(viper.GetString("NRTK_API_URL"), viper.GetString("NRTK_API_TOKEN"))
+	if viper.GetInt64("INFINITY") > 0 {
+		for {
+			sleep_timer := time.Duration(viper.GetInt("INFINITY")) * time.Millisecond
+			run()
+			log.Printf("Sleeping for %v seconds", sleep_timer.Seconds())
+			time.Sleep(sleep_timer)
+		}
 	} else {
-		api_response, fetchError = readJSONFile("local.json")
-	}
-
-	if fetchError != nil {
-		panic(fetchError)
-	} else {
-		sync(api_response)
+		run()
 	}
 
 }
