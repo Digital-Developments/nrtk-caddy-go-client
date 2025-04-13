@@ -130,8 +130,8 @@ func (m *MetaObject) SaveMeta() {
 
 func (s *Story) SaveFile() {
 
-	filepath := fmt.Sprintf("%v/%v", viper.GetString("ContentDir"), s.Anchor)
-	f, err := os.OpenFile(filepath, os.O_CREATE, 0666)
+	filepath := fmt.Sprintf("%v/%v%v", viper.GetString("ContentDir"), s.Anchor, viper.GetString("ContentFileExtension"))
+	f, err := os.OpenFile(filepath, os.O_CREATE|os.O_WRONLY, 0666)
 	if err != nil {
 		log.Printf("! Unable to open path %v for writing\n", filepath)
 	}
@@ -207,6 +207,7 @@ func main() {
 	viper.SetDefault("ContentDir", viper.GetString("AppDir")+"www/")
 	viper.SetDefault("BinDir", viper.GetString("AppDir")+"bin/")
 	viper.SetDefault("MetaPath", viper.GetString("AppDir")+"meta.json")
+	viper.SetDefault("ContentFileExtension", ".html")
 
 	err := viper.ReadInConfig()
 	if err != nil {
