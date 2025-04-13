@@ -75,14 +75,14 @@ func (e ErrorPage) GetContent() []byte {
 }
 
 type SiteData struct {
-	Title       string    `json:"title"`
-	Entity      string    `json:"entity"`
-	Locale      string    `json:"locale"`
-	SiteName    string    `json:"site_name"`
-	LogoUrl     string    `json:"logo_url"`
-	HomepageUrl string    `json:"homepage_url"`
-	Stories     []Story   `json:"stories"`
-	ErrorPage   ErrorPage `json:"error_page"`
+	Title       string  `json:"title"`
+	Entity      string  `json:"entity"`
+	Locale      string  `json:"locale"`
+	SiteName    string  `json:"site_name"`
+	LogoUrl     string  `json:"logo_url"`
+	HomepageUrl string  `json:"homepage_url"`
+	Stories     []Story `json:"stories"`
+	ErrorPage   string  `json:"error_page"`
 }
 
 type MetaObject struct {
@@ -189,9 +189,10 @@ func sync(api_response []byte) {
 	jsonErr := json.Unmarshal(api_response, &sync_data)
 
 	if jsonErr != nil {
+		fmt.Println(jsonErr)
 		log.Fatal("unable to parse JSON data")
 		log.Fatal(jsonErr)
-		panic("bad sync data")
+		panic(jsonErr)
 	}
 
 	err := create_dirs()
@@ -202,6 +203,11 @@ func sync(api_response []byte) {
 	}
 
 	log.Printf("Sync content for %v with %v stories\n", sync_data.SiteName, len(sync_data.Stories))
+
+	error_page := ErrorPage{
+		Content: sync_data.ErrorPage,
+	}
+	SaveFile(error_page)
 
 	meta_object := MetaObject{
 		Title:       sync_data.Title,
@@ -219,7 +225,6 @@ func sync(api_response []byte) {
 	}
 
 	SaveFile(meta_object)
-	SaveFile(sync_data.ErrorPage)
 
 }
 
