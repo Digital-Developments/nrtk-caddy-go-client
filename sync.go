@@ -14,6 +14,32 @@ import (
 	"github.com/spf13/viper"
 )
 
+type LocalWriter interface {
+	GetFilePath() string
+	GetContent() []byte
+}
+
+func SaveFile(any interface{}) error {
+
+	if obj, ok := any.(LocalWriter); ok {
+		f, err := os.OpenFile(obj.GetFilePath(), os.O_CREATE|os.O_WRONLY, 0666)
+		if err != nil {
+			return fmt.Errorf("unable to open %v for writing\n", obj.GetFilePath())
+		}
+
+		log.Printf("Saving %v\n", obj.GetFilePath())
+		_, e := f.Write(obj.GetContent())
+		if e != nil {
+			return e
+		}
+		f.Close()
+		return nil
+	}
+
+	return fmt.Errorf("LocalWriter interface is not supported")
+
+}
+
 type Story struct {
 	Uid          string `json:"uid"`
 	Anchor       string `json:"anchor"`
@@ -28,15 +54,35 @@ type Story struct {
 	Hash         string `json:"hash"`
 }
 
+func (s Story) GetFilePath() string {
+	return fmt.Sprintf("%v%v%v", viper.GetString("ContentDir"), s.Anchor, viper.GetString("ContentFileExtension"))
+}
+
+func (s Story) GetContent() []byte {
+	return []byte(s.Content)
+}
+
+type ErrorPage struct {
+	Content string
+}
+
+func (e ErrorPage) GetFilePath() string {
+	return fmt.Sprintf("%v%v%v", viper.GetString("ContentDir"), "error", viper.GetString("ContentFileExtension"))
+}
+
+func (e ErrorPage) GetContent() []byte {
+	return []byte(e.Content)
+}
+
 type SiteData struct {
-	Title       string  `json:"title"`
-	Entity      string  `json:"entity"`
-	Locale      string  `json:"locale"`
-	SiteName    string  `json:"site_name"`
-	LogoUrl     string  `json:"logo_url"`
-	HomepageUrl string  `json:"homepage_url"`
-	Stories     []Story `json:"stories"`
-	ErrorPage   string  `json:"error_page"`
+	Title       string    `json:"title"`
+	Entity      string    `json:"entity"`
+	Locale      string    `json:"locale"`
+	SiteName    string    `json:"site_name"`
+	LogoUrl     string    `json:"logo_url"`
+	HomepageUrl string    `json:"homepage_url"`
+	Stories     []Story   `json:"stories"`
+	ErrorPage   ErrorPage `json:"error_page"`
 }
 
 type MetaObject struct {
@@ -46,6 +92,25 @@ type MetaObject struct {
 	Stories     []Story   `json:"stories"`
 	Checksum    string    `json:"checksum"`
 	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+func (m *MetaObject) SetChecksum(data []byte) {
+	h := sha256.New()
+	h.Write(data)
+	m.Checksum = fmt.Sprintf("%x", h.Sum(nil))
+	log.Printf("Content Checksum: %x\n", m.Checksum)
+
+	m.UpdatedAt = time.Now()
+	log.Printf("Meta Updated: %v\n", m.UpdatedAt)
+}
+
+func (m MetaObject) GetFilePath() string {
+	return viper.GetString("MetaPath")
+}
+
+func (m MetaObject) GetContent() []byte {
+	json_dump, _ := json.Marshal(m)
+	return json_dump
 }
 
 func fetch_local() ([]byte, error) {
@@ -102,46 +167,6 @@ func fetch_remote(url, token string) ([]byte, error) {
 	return body, nil
 }
 
-func (m *MetaObject) SetChecksum(data []byte) {
-	h := sha256.New()
-	h.Write(data)
-	m.Checksum = fmt.Sprintf("%x", h.Sum(nil))
-	log.Printf("Content Checksum: %x\n", m.Checksum)
-
-	m.UpdatedAt = time.Now()
-	log.Printf("Meta Updated: %v\n", m.UpdatedAt)
-}
-
-func (m *MetaObject) SaveMeta() {
-
-	f, err := os.OpenFile(viper.GetString("MetaPath"), os.O_CREATE|os.O_WRONLY, 0666)
-	if err != nil {
-		log.Printf("! Unable to open %v for writing\n", viper.GetString("MetaPath"))
-	}
-
-	json_dump, _ := json.Marshal(m)
-	log.Printf("Saving Meta\n")
-	_, e := f.Write(json_dump)
-	if e != nil {
-		fmt.Println(e)
-	}
-	f.Close()
-}
-
-func (s *Story) SaveFile() {
-
-	filepath := fmt.Sprintf("%v/%v%v", viper.GetString("ContentDir"), s.Anchor, viper.GetString("ContentFileExtension"))
-	f, err := os.OpenFile(filepath, os.O_CREATE|os.O_WRONLY, 0666)
-	if err != nil {
-		log.Printf("! Unable to open path %v for writing\n", filepath)
-	}
-
-	log.Printf("Saving %v content in %v\n", s.Title, s.Anchor)
-	f.WriteString(s.Content)
-	f.Close()
-
-}
-
 func create_dirs() error {
 
 	content_dir_err := os.MkdirAll(viper.GetString("ContentDir"), 0755)
@@ -187,10 +212,14 @@ func sync(api_response []byte) {
 	meta_object.SetChecksum(api_response)
 
 	for _, story := range sync_data.Stories {
-		story.SaveFile()
+		e := SaveFile(story)
+		if e != nil {
+			fmt.Println(e)
+		}
 	}
 
-	meta_object.SaveMeta()
+	SaveFile(meta_object)
+	SaveFile(sync_data.ErrorPage)
 
 }
 
