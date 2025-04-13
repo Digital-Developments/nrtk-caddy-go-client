@@ -54,6 +54,14 @@ type Story struct {
 	Hash         string `json:"hash"`
 }
 
+func (s *Story) GetSitemapItem() string {
+	priority := .8
+	if s.Anchor == "index" {
+		priority = 1
+	}
+	return fmt.Sprintf("<url><loc>%v</loc><lastmod>%v+00:00</lastmod><priority>%v</priority></url>", s.CanonicalUrl, s.UpdatedAt[:19], priority)
+}
+
 func (s Story) GetFilePath() string {
 	return fmt.Sprintf("%v%v%v", viper.GetString("ContentDir"), s.Anchor, viper.GetString("ContentFileExtension"))
 }
@@ -62,16 +70,17 @@ func (s Story) GetContent() []byte {
 	return []byte(s.Content)
 }
 
-type ErrorPage struct {
-	Content string
+type ContentFile struct {
+	FileName string
+	Content  string
 }
 
-func (e ErrorPage) GetFilePath() string {
-	return fmt.Sprintf("%v%v%v", viper.GetString("ContentDir"), "error", viper.GetString("ContentFileExtension"))
+func (f ContentFile) GetFilePath() string {
+	return fmt.Sprintf("%v%v", viper.GetString("ContentDir"), f.FileName)
 }
 
-func (e ErrorPage) GetContent() []byte {
-	return []byte(e.Content)
+func (f ContentFile) GetContent() []byte {
+	return []byte(f.Content)
 }
 
 type SiteData struct {
@@ -83,6 +92,18 @@ type SiteData struct {
 	HomepageUrl string  `json:"homepage_url"`
 	Stories     []Story `json:"stories"`
 	ErrorPage   string  `json:"error_page"`
+}
+
+func (sd *SiteData) GetSitemap() string {
+
+	sitemap := "<?xml version=\"1.0\" encoding=\"UTF-8\"?><urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:schemaLocation=\"http://www.sitemaps.org/schemas/sitemap/0.9 http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd\"><!-- Created by Newsroom Toolkit www.newsroomtoolkit.com -->"
+
+	for _, story := range sd.Stories {
+		sitemap += story.GetSitemapItem()
+	}
+
+	return sitemap + "</urlset>"
+
 }
 
 type MetaObject struct {
@@ -221,10 +242,6 @@ func sync(api_response []byte) {
 
 	log.Printf("Sync content for %v with %v stories\n", sync_data.SiteName, len(sync_data.Stories))
 
-	error_page := ErrorPage{
-		Content: sync_data.ErrorPage,
-	}
-
 	meta_object := MetaObject{
 		Title:       sync_data.Title,
 		Entity:      sync_data.Entity,
@@ -249,7 +266,17 @@ func sync(api_response []byte) {
 			}
 		}
 
+		error_page := ContentFile{
+			FileName: "error" + viper.GetString("ContentFileExtension"),
+			Content:  sync_data.ErrorPage,
+		}
 		SaveFile(error_page)
+
+		sitemap := ContentFile{
+			FileName: "sitemap.xml",
+			Content:  sync_data.GetSitemap(),
+		}
+		SaveFile(sitemap)
 
 	} else {
 		log.Printf("Nothing to update")
