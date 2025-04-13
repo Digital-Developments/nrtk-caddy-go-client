@@ -98,7 +98,7 @@ func (m *MetaObject) SetChecksum(data []byte) {
 	h := sha256.New()
 	h.Write(data)
 	m.Checksum = fmt.Sprintf("%x", h.Sum(nil))
-	log.Printf("Content Checksum: %x\n", m.Checksum)
+	log.Printf("Content Checksum: %v\n", m.Checksum)
 
 	m.UpdatedAt = time.Now()
 	log.Printf("Meta Updated: %v\n", m.UpdatedAt)
@@ -189,17 +189,14 @@ func sync(api_response []byte) {
 	jsonErr := json.Unmarshal(api_response, &sync_data)
 
 	if jsonErr != nil {
-		fmt.Println(jsonErr)
-		log.Fatal("unable to parse JSON data")
 		log.Fatal(jsonErr)
-		panic(jsonErr)
+		panic("unable to parse JSON data")
 	}
 
 	err := create_dirs()
 	if err != nil {
-		log.Fatal("unable to create app dirs")
 		log.Fatal(err)
-		panic("filesystem error")
+		panic("unable to create app dirs")
 	}
 
 	log.Printf("Sync content for %v with %v stories\n", sync_data.SiteName, len(sync_data.Stories))
@@ -258,8 +255,7 @@ func main() {
 	}
 
 	if fetchError != nil {
-		log.Fatal(fetchError)
-
+		panic(fetchError)
 	} else {
 		sync(api_response)
 	}
