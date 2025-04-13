@@ -253,9 +253,9 @@ func sync(api_response []byte) {
 
 	result, err := meta_object.IsUpdateNeeded()
 
-	if result {
+	if result || viper.GetBool("IS_FORCE_UPDATE") {
 
-		log.Printf("Update detected")
+		log.Printf("Update detected (IS_FORCE_UPDATE=%v)", viper.GetBool("IS_FORCE_UPDATE"))
 
 		SaveFile(meta_object)
 
