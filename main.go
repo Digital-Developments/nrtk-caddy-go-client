@@ -24,7 +24,7 @@ func SaveFile(any interface{}) error {
 	if obj, ok := any.(LocalWriter); ok {
 		f, err := os.OpenFile(obj.GetFilePath(), os.O_CREATE|os.O_WRONLY, 0666)
 		if err != nil {
-			return fmt.Errorf("unable to open %v for writing\n", obj.GetFilePath())
+			return fmt.Errorf("unable to open %v for writing", obj.GetFilePath())
 		}
 
 		log.Printf("Saving %v\n", obj.GetFilePath())
@@ -118,7 +118,7 @@ type MetaObject struct {
 
 func (m *MetaObject) IsUpdateNeeded() (bool, error) {
 
-	local_json, err := readJSONFile(viper.GetString("MetaPath"))
+	local_json, err := read_json_file(viper.GetString("MetaPath"))
 
 	if err != nil {
 		return true, err
@@ -157,10 +157,13 @@ func (m MetaObject) GetContent() []byte {
 	return json_dump
 }
 
-func readJSONFile(filePath string) ([]byte, error) {
-	jsonFile, err := os.Open(filePath)
+func read_json_file(filePath string) ([]byte, error) {
+	jsonFile, open_err := os.Open(filePath)
+	if open_err != nil {
+		return nil, open_err
+	}
 
-	log.Printf("Reading JSON from %v\n", filePath)
+	log.Printf("Reading data from %v\n", filePath)
 
 	defer jsonFile.Close()
 
@@ -287,7 +290,7 @@ func run() {
 	if viper.GetBool("IS_REMOTE") {
 		api_response, fetchError = fetch_remote(viper.GetString("NRTK_API_URL"), viper.GetString("NRTK_API_TOKEN"))
 	} else {
-		api_response, fetchError = readJSONFile("local.json")
+		api_response, fetchError = read_json_file("local.json")
 	}
 
 	if fetchError != nil {
@@ -317,11 +320,11 @@ func main() {
 		panic(fmt.Errorf("fatal error config file: %w", err))
 	}
 
-	if viper.GetInt64("INFINITY") > 0 {
+	if viper.GetInt("INFINITY") > 0 {
 		for {
 			sleep_timer := time.Duration(viper.GetInt("INFINITY")) * time.Millisecond
 			run()
-			log.Printf("Sleeping for %v seconds", sleep_timer.Seconds())
+			log.Printf("Taking a %v second nap", sleep_timer.Seconds())
 			time.Sleep(sleep_timer)
 		}
 	} else {

@@ -1,5 +1,9 @@
 FROM golang:1.24-bookworm AS builder
 
+LABEL app.nrtk-client-go.vendor="Digital Developments"
+LABEL app.nrtk-client-go.version="0.1"
+LABEL app.nrtk-client-go.release-date="2025-04-13"
+
 WORKDIR /app
 
 COPY go.* ./
