@@ -1,5 +1,3 @@
-module github.com/joeface/nrtk-caddy-go
+module github.com/Digital-Developments/nrtk-caddy-go-client
 
-go 1.24.0
-
-require github.com/spf13/viper v1.20.1
+go 1.23.0
