@@ -32,7 +32,7 @@ func SaveFile(any interface{}) error {
 		if e != nil {
 			return e
 		}
-		f.Close()
+		defer f.Close()
 		return nil
 	}
 
@@ -92,6 +92,30 @@ type MetaObject struct {
 	Stories     []Story   `json:"stories"`
 	Checksum    string    `json:"checksum"`
 	UpdatedAt   time.Time `json:"updated_at"`
+	IsExpired   bool
+}
+
+func (m *MetaObject) IsUpdateNeeded() (bool, error) {
+
+	local_json, err := readJSONFile(viper.GetString("MetaPath"))
+
+	if err != nil {
+		return true, err
+	} else {
+		current_meta := MetaObject{}
+		jsonErr := json.Unmarshal(local_json, &current_meta)
+		if jsonErr != nil {
+			return true, jsonErr
+		} else {
+			current_meta.IsExpired = current_meta.Checksum != m.Checksum
+			if current_meta.IsExpired {
+				log.Printf("Meta update detected")
+				SaveFile(current_meta)
+			}
+			return current_meta.IsExpired, nil
+		}
+	}
+
 }
 
 func (m *MetaObject) SetChecksum(data []byte) {
@@ -101,10 +125,12 @@ func (m *MetaObject) SetChecksum(data []byte) {
 	log.Printf("Content Checksum: %v\n", m.Checksum)
 
 	m.UpdatedAt = time.Now()
-	log.Printf("Meta Updated: %v\n", m.UpdatedAt)
 }
 
 func (m MetaObject) GetFilePath() string {
+	if m.IsExpired {
+		return fmt.Sprintf("%vmeta.%v.json", viper.GetString("BinDir"), m.Checksum)
+	}
 	return viper.GetString("MetaPath")
 }
 
@@ -113,15 +139,14 @@ func (m MetaObject) GetContent() []byte {
 	return json_dump
 }
 
-func fetch_local() ([]byte, error) {
-	fileName := "local.json"
-	jsonFile, err := os.Open(fileName)
+func readJSONFile(filePath string) ([]byte, error) {
+	jsonFile, err := os.Open(filePath)
 
 	if err != nil {
 		fmt.Println(err)
 	}
 
-	log.Printf("Fetching local response %v\n", fileName)
+	log.Printf("Reading JSON from %v\n", filePath)
 
 	defer jsonFile.Close()
 
@@ -204,24 +229,36 @@ func sync(api_response []byte) {
 	error_page := ErrorPage{
 		Content: sync_data.ErrorPage,
 	}
-	SaveFile(error_page)
 
 	meta_object := MetaObject{
 		Title:       sync_data.Title,
 		Entity:      sync_data.Entity,
 		HomepageUrl: sync_data.HomepageUrl,
+		Stories:     sync_data.Stories,
 	}
 
 	meta_object.SetChecksum(api_response)
 
-	for _, story := range sync_data.Stories {
-		e := SaveFile(story)
-		if e != nil {
-			fmt.Println(e)
-		}
+	result, err := meta_object.IsUpdateNeeded()
+	if err != nil {
+		fmt.Println(err)
 	}
+	if result {
 
-	SaveFile(meta_object)
+		SaveFile(meta_object)
+
+		for _, story := range sync_data.Stories {
+			e := SaveFile(story)
+			if e != nil {
+				fmt.Println(e)
+			}
+		}
+
+		SaveFile(error_page)
+
+	} else {
+		log.Printf("Nothing to update")
+	}
 
 }
 
@@ -251,7 +288,7 @@ func main() {
 	if viper.GetBool("IS_REMOTE") {
 		api_response, fetchError = fetch_remote(viper.GetString("NRTK_API_URL"), viper.GetString("NRTK_API_TOKEN"))
 	} else {
-		api_response, fetchError = fetch_local()
+		api_response, fetchError = readJSONFile("local.json")
 	}
 
 	if fetchError != nil {
