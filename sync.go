@@ -92,7 +92,7 @@ type MetaObject struct {
 	Stories     []Story   `json:"stories"`
 	Checksum    string    `json:"checksum"`
 	UpdatedAt   time.Time `json:"updated_at"`
-	IsExpired   bool
+	IsExpired   bool      `json:"-"`
 }
 
 func (m *MetaObject) IsUpdateNeeded() (bool, error) {
@@ -109,7 +109,6 @@ func (m *MetaObject) IsUpdateNeeded() (bool, error) {
 		} else {
 			current_meta.IsExpired = current_meta.Checksum != m.Checksum
 			if current_meta.IsExpired {
-				log.Printf("Meta update detected")
 				SaveFile(current_meta)
 			}
 			return current_meta.IsExpired, nil
@@ -129,7 +128,7 @@ func (m *MetaObject) SetChecksum(data []byte) {
 
 func (m MetaObject) GetFilePath() string {
 	if m.IsExpired {
-		return fmt.Sprintf("%vmeta.%v.json", viper.GetString("BinDir"), m.Checksum)
+		return fmt.Sprintf("%vmeta.%v.json", viper.GetString("SnapshotDir"), m.Checksum)
 	}
 	return viper.GetString("MetaPath")
 }
@@ -141,10 +140,6 @@ func (m MetaObject) GetContent() []byte {
 
 func readJSONFile(filePath string) ([]byte, error) {
 	jsonFile, err := os.Open(filePath)
-
-	if err != nil {
-		fmt.Println(err)
-	}
 
 	log.Printf("Reading JSON from %v\n", filePath)
 
@@ -199,7 +194,7 @@ func create_dirs() error {
 		return content_dir_err
 	}
 
-	bin_dir_err := os.MkdirAll(viper.GetString("BinDir"), 0755)
+	bin_dir_err := os.MkdirAll(viper.GetString("SnapshotDir"), 0755)
 	if bin_dir_err != nil {
 		return bin_dir_err
 	}
@@ -240,10 +235,10 @@ func sync(api_response []byte) {
 	meta_object.SetChecksum(api_response)
 
 	result, err := meta_object.IsUpdateNeeded()
-	if err != nil {
-		fmt.Println(err)
-	}
+
 	if result {
+
+		log.Printf("Update detected")
 
 		SaveFile(meta_object)
 
@@ -273,7 +268,7 @@ func main() {
 
 	viper.SetDefault("AppDir", ".nrtk/")
 	viper.SetDefault("ContentDir", viper.GetString("AppDir")+"www/")
-	viper.SetDefault("BinDir", viper.GetString("AppDir")+"bin/")
+	viper.SetDefault("SnapshotDir", viper.GetString("AppDir")+"snapshot/")
 	viper.SetDefault("MetaPath", viper.GetString("AppDir")+"meta.json")
 	viper.SetDefault("ContentFileExtension", ".html")
 
