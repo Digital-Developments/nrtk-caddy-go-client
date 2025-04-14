@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path"
 	"time"
 
 	"github.com/spf13/viper"
@@ -308,31 +309,67 @@ func parse(api_response []byte) {
 
 }
 
-func start_server() error {
+func requestHandler(w http.ResponseWriter, r *http.Request) {
+
+	request_path := r.URL.Path[len("/"):]
+	file_path := viper.GetString("ContentDir") + path.Clean(request_path)
+
+	if len(request_path) > 0 {
+
+		if request_path == viper.GetString("HTTP_SERVER_SYNC_HANDLER") {
+			if r.URL.Query().Get("token") == viper.GetString("NRTK_API_TOKEN") {
+				log.Printf("Sync signal recieved from %v", r.RemoteAddr)
+				w.WriteHeader(200)
+				fmt.Fprint(w, "👋 Sync signal recieved")
+				sync()
+			} else {
+				log.Printf("Invalid sync token %v recieved from %v", r.URL.Query().Get("token"), r.RemoteAddr)
+				w.WriteHeader(401)
+				fmt.Fprint(w, "💔 Unable to handle your request")
+			}
+
+		} else {
+
+			_, err := os.OpenFile(file_path, os.O_RDONLY, 0644)
+			if os.IsNotExist(err) {
+				log.Printf("Error 404: %v", err)
+				if len(viper.GetString("ContentFileExtension")) > 0 {
+
+					file_path_extension := viper.GetString("ContentDir") + request_path + viper.GetString("ContentFileExtension")
+					_, err_extension := os.OpenFile(file_path_extension, os.O_RDONLY, 0644)
+
+					if os.IsNotExist(err_extension) {
+						log.Printf("Error 404: %v", err_extension)
+						http.ServeFile(w, r, viper.GetString("ContentDir")+"/404"+viper.GetString("ContentFileExtension"))
+					} else {
+						http.ServeFile(w, r, file_path_extension)
+					}
+
+				} else {
+					http.ServeFile(w, r, viper.GetString("ContentDir")+"/404")
+				}
+
+			} else {
+				http.ServeFile(w, r, file_path)
+			}
+
+		}
+
+	} else {
+		http.ServeFile(w, r, viper.GetString("ContentDir")+"/index"+viper.GetString("ContentFileExtension"))
+	}
+
+}
+
+func start_server() {
 
 	log.Printf("Starting web server on :" + viper.GetString("HTTP_SERVER_PORT"))
 
-	http.HandleFunc("/"+viper.GetString("HTTP_SERVER_SYNC_HANDLER"), func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("token") == viper.GetString("NRTK_API_TOKEN") {
-			log.Printf("Sync signal recieved from %v", r.RemoteAddr)
-			w.WriteHeader(200)
-			fmt.Fprint(w, "👋 Sync signal recieved")
-			sync()
-		} else {
-			log.Printf("Invalid sync token %v recieved from %v", r.URL.Query().Get("token"), r.RemoteAddr)
-			w.WriteHeader(401)
-			fmt.Fprint(w, "💔 Unable to handle your request")
-		}
-	})
+	http.HandleFunc("/", requestHandler)
 
-	fs := http.FileServer(http.Dir(viper.GetString("ContentDir")))
-	http.Handle("/", http.StripPrefix("/", fs))
-
-	err := http.ListenAndServe(":"+viper.GetString("HTTP_SERVER_PORT"), nil)
-	if err != nil {
-		return err
+	if err := http.ListenAndServe(":"+viper.GetString("HTTP_SERVER_PORT"), nil); err != nil {
+		log.Fatal(err)
 	}
-	return nil
 }
 
 func sync() {
@@ -355,6 +392,7 @@ func sync() {
 func main() {
 
 	viper.SetDefault("APP_NAME", ".nrtk")
+	viper.SetDefault("ContentFileExtension", "")
 
 	log.SetPrefix("nrtk-sync: ")
 	log.SetFlags(0)
@@ -371,16 +409,14 @@ func main() {
 	viper.Set("ContentDir", viper.GetString("APP_NAME")+"/www/")
 	viper.Set("SnapshotDir", viper.GetString("APP_NAME")+"/snapshot/")
 	viper.Set("MetaPath", viper.GetString("APP_NAME")+"/meta.json")
-	viper.Set("ContentFileExtension", ".html")
+
+	if viper.GetBool("ADD_HTML_EXTENSION") {
+		viper.Set("ContentFileExtension", ".html")
+	}
 
 	if viper.GetBool("HTTP_SERVER_ENABLED") && viper.GetInt("HTTP_SERVER_PORT") > 0 {
 		sync()
-		err := start_server()
-		if err != nil {
-			panic(fmt.Errorf("unable to start webserver: %w", err))
-		} else {
-			log.Printf("Exit webserver")
-		}
+		start_server()
 
 	} else {
 
