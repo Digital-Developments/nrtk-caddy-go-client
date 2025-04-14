@@ -266,7 +266,7 @@ func parse(api_response []byte) {
 		}
 
 		error_page := ContentFile{
-			FileName: "error" + viper.GetString("ContentFileExtension"),
+			FileName: "404" + viper.GetString("ContentFileExtension"),
 			Content:  sync_data.ErrorPage,
 		}
 		SaveFile(error_page)
@@ -285,7 +285,7 @@ func parse(api_response []byte) {
 
 func start_server() error {
 
-	log.Printf("Starting web server")
+	log.Printf("Starting web server on :" + viper.GetString("HTTP_SERVER_PORT"))
 
 	fs := http.FileServer(http.Dir(viper.GetString("ContentDir")))
 	http.Handle("/", http.StripPrefix("/", fs))
@@ -323,11 +323,11 @@ func main() {
 	viper.SetConfigType("env")
 	viper.AddConfigPath(".")
 
-	viper.SetDefault("AppDir", ".nrtk/")
-	viper.SetDefault("ContentDir", viper.GetString("AppDir")+"www/")
-	viper.SetDefault("SnapshotDir", viper.GetString("AppDir")+"snapshot/")
-	viper.SetDefault("MetaPath", viper.GetString("AppDir")+"meta.json")
-	viper.SetDefault("ContentFileExtension", ".html")
+	viper.SetDefault("APP_NAME", ".nrtk/")
+	viper.Set("ContentDir", viper.GetString("APP_NAME")+"www/")
+	viper.Set("SnapshotDir", viper.GetString("APP_NAME")+"snapshot/")
+	viper.Set("MetaPath", viper.GetString("APP_NAME")+"meta.json")
+	viper.Set("ContentFileExtension", ".html")
 
 	err := viper.ReadInConfig()
 	if err != nil {
