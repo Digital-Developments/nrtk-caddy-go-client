@@ -316,6 +316,8 @@ func sync() {
 
 func main() {
 
+	viper.SetDefault("APP_NAME", ".nrtk")
+
 	log.SetPrefix("nrtk-sync: ")
 	log.SetFlags(0)
 
@@ -323,16 +325,15 @@ func main() {
 	viper.SetConfigType("env")
 	viper.AddConfigPath(".")
 
-	viper.SetDefault("APP_NAME", ".nrtk/")
-	viper.Set("ContentDir", viper.GetString("APP_NAME")+"www/")
-	viper.Set("SnapshotDir", viper.GetString("APP_NAME")+"snapshot/")
-	viper.Set("MetaPath", viper.GetString("APP_NAME")+"meta.json")
-	viper.Set("ContentFileExtension", ".html")
-
 	err := viper.ReadInConfig()
 	if err != nil {
 		panic(fmt.Errorf("fatal error config file: %w", err))
 	}
+
+	viper.Set("ContentDir", viper.GetString("APP_NAME")+"/www/")
+	viper.Set("SnapshotDir", viper.GetString("APP_NAME")+"/snapshot/")
+	viper.Set("MetaPath", viper.GetString("APP_NAME")+"/meta.json")
+	viper.Set("ContentFileExtension", ".html")
 
 	if viper.GetBool("HTTP_SERVER_ENABLED") && viper.GetInt("HTTP_SERVER_PORT") > 0 {
 		sync()
