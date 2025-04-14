@@ -225,6 +225,29 @@ func create_dirs() error {
 
 }
 
+func empty_content_dir() error {
+
+	log.Printf("Purging content at %v", viper.GetString("ContentDir"))
+
+	files, err := os.ReadDir(viper.GetString("ContentDir"))
+
+	if err != nil {
+		return err
+	}
+
+	for _, f := range files {
+
+		e := os.Remove(viper.GetString("ContentDir") + "/" + f.Name())
+		if e != nil {
+			return e
+		}
+
+		log.Printf("Removing %v\n", f.Name())
+	}
+
+	return nil
+}
+
 func parse(api_response []byte) {
 
 	sync_data := SiteData{}
@@ -255,6 +278,8 @@ func parse(api_response []byte) {
 	if result || viper.GetBool("MODE_FORCE_UPDATE") {
 
 		log.Printf("Sync content for %v with %v stories (MODE_FORCE_UPDATE=%v)\n", sync_data.SiteName, len(sync_data.Stories), viper.GetBool("MODE_FORCE_UPDATE"))
+
+		empty_content_dir()
 
 		SaveFile(meta_object)
 
