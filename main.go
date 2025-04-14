@@ -225,7 +225,7 @@ func create_dirs() error {
 
 }
 
-func sync(api_response []byte) {
+func parse(api_response []byte) {
 
 	sync_data := SiteData{}
 	jsonErr := json.Unmarshal(api_response, &sync_data)
@@ -252,9 +252,9 @@ func sync(api_response []byte) {
 
 	result, _ := meta_object.IsUpdateNeeded()
 
-	if result || viper.GetBool("IS_FORCE_UPDATE") {
+	if result || viper.GetBool("MODE_FORCE_UPDATE") {
 
-		log.Printf("Sync content for %v with %v stories (IS_FORCE_UPDATE=%v)\n", sync_data.SiteName, len(sync_data.Stories), viper.GetBool("IS_FORCE_UPDATE"))
+		log.Printf("Sync content for %v with %v stories (MODE_FORCE_UPDATE=%v)\n", sync_data.SiteName, len(sync_data.Stories), viper.GetBool("MODE_FORCE_UPDATE"))
 
 		SaveFile(meta_object)
 
@@ -283,11 +283,25 @@ func sync(api_response []byte) {
 
 }
 
-func run() {
+func start_server() error {
+
+	log.Printf("Starting web server")
+
+	fs := http.FileServer(http.Dir(viper.GetString("ContentDir")))
+	http.Handle("/", http.StripPrefix("/", fs))
+
+	err := http.ListenAndServe(":"+viper.GetString("HTTP_SERVER_PORT"), nil)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func sync() {
 	var api_response []byte
 	var fetchError error
 
-	if viper.GetBool("IS_REMOTE") {
+	if !viper.GetBool("MODE_FETCH_LOCAL") {
 		api_response, fetchError = fetch_remote(viper.GetString("NRTK_API_URL"), viper.GetString("NRTK_API_TOKEN"))
 	} else {
 		api_response, fetchError = read_json_file("local.json")
@@ -296,7 +310,7 @@ func run() {
 	if fetchError != nil {
 		panic(fetchError)
 	} else {
-		sync(api_response)
+		parse(api_response)
 	}
 }
 
@@ -320,15 +334,27 @@ func main() {
 		panic(fmt.Errorf("fatal error config file: %w", err))
 	}
 
-	if viper.GetInt("INFINITY") > 0 {
-		for {
-			sleep_timer := time.Duration(viper.GetInt("INFINITY")) * time.Millisecond
-			run()
-			log.Printf("Taking a %v second nap", sleep_timer.Seconds())
-			time.Sleep(sleep_timer)
+	if viper.GetBool("HTTP_SERVER_ENABLED") && viper.GetInt("HTTP_SERVER_PORT") > 0 {
+		sync()
+		err := start_server()
+		if err != nil {
+			panic(fmt.Errorf("unable to start webserver: %w", err))
+		} else {
+			log.Printf("Exit webserver")
 		}
-	} else {
-		run()
-	}
 
+	} else {
+
+		if viper.GetInt("MODE_INFINITY") > 0 {
+			for {
+				sleep_timer := time.Duration(viper.GetInt("MODE_INFINITY")) * time.Millisecond
+				sync()
+				log.Printf("Taking a %v second nap", sleep_timer.Seconds())
+				time.Sleep(sleep_timer)
+			}
+
+		} else {
+			sync()
+		}
+	}
 }
