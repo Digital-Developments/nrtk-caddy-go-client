@@ -312,6 +312,19 @@ func start_server() error {
 
 	log.Printf("Starting web server on :" + viper.GetString("HTTP_SERVER_PORT"))
 
+	http.HandleFunc("/"+viper.GetString("HTTP_SERVER_SYNC_HANDLER"), func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("token") == viper.GetString("NRTK_API_TOKEN") {
+			log.Printf("Sync signal recieved from %v", r.RemoteAddr)
+			w.WriteHeader(200)
+			fmt.Fprint(w, "👋 Sync signal recieved")
+			sync()
+		} else {
+			log.Printf("Invalid sync token %v recieved from %v", r.URL.Query().Get("token"), r.RemoteAddr)
+			w.WriteHeader(401)
+			fmt.Fprint(w, "💔 Unable to handle your request")
+		}
+	})
+
 	fs := http.FileServer(http.Dir(viper.GetString("ContentDir")))
 	http.Handle("/", http.StripPrefix("/", fs))
 
@@ -326,7 +339,7 @@ func sync() {
 	var api_response []byte
 	var fetchError error
 
-	if !viper.GetBool("MODE_FETCH_LOCAL") {
+	if !viper.GetBool("MODE_FETCH_LOCAL") && len(viper.GetString("NRTK_API_TOKEN")) > 0 {
 		api_response, fetchError = fetch_remote(viper.GetString("NRTK_API_URL"), viper.GetString("NRTK_API_TOKEN"))
 	} else {
 		api_response, fetchError = read_json_file("local.json")
