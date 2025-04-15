@@ -355,20 +355,29 @@ func handleFileRequest(w http.ResponseWriter, r *http.Request) {
 
 func requestHandler(w http.ResponseWriter, r *http.Request) {
 
-	log.Printf("Handling %v from %v", r.URL.Path, r.RemoteAddr)
-
-	if r.URL.Path != "/" {
-
-		if r.URL.Path == viper.GetString("HTTP_SERVER_SYNC_HANDLER") {
-			handleSyncRequest(w, r)
-		} else {
-			handleFileRequest(w, r)
-		}
-
-	} else {
-		http.ServeFile(w, r, viper.GetString("ContentDir")+"/index"+viper.GetString("ContentFileExtension"))
+	ignoreURLs := map[string]bool{
+		"/favicon.ico": true,
+		"/robots.txt":  true,
 	}
 
+	if ignoreURLs[r.URL.Path] {
+		http.NotFound(w, r)
+	} else {
+
+		log.Printf("Handling %v from %v", r.URL.Path, r.RemoteAddr)
+
+		if r.URL.Path != "/" {
+
+			if r.URL.Path == viper.GetString("HTTP_SERVER_SYNC_HANDLER") {
+				handleSyncRequest(w, r)
+			} else {
+				handleFileRequest(w, r)
+			}
+
+		} else {
+			http.ServeFile(w, r, viper.GetString("ContentDir")+"/index"+viper.GetString("ContentFileExtension"))
+		}
+	}
 }
 
 func start_server() {
@@ -403,6 +412,7 @@ func main() {
 
 	viper.SetDefault("APP_NAME", ".nrtk")
 	viper.SetDefault("ContentFileExtension", "")
+	viper.SetDefault("HTTP_SERVER_PORT", os.Getenv("HTTP_SERVER_PORT"))
 
 	log.SetPrefix("nrtk-sync: ")
 	log.SetFlags(0)
