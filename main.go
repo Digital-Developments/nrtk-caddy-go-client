@@ -309,50 +309,60 @@ func parse(api_response []byte) {
 
 }
 
-func requestHandler(w http.ResponseWriter, r *http.Request) {
+func handleSyncRequest(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("token") == viper.GetString("NRTK_API_TOKEN") {
+		log.Printf("Sync signal recieved from %v", r.RemoteAddr)
+		w.WriteHeader(200)
+		fmt.Fprint(w, "👋 Sync signal recieved")
+		sync()
+	} else {
+		log.Printf("Invalid sync token [%v] recieved from %v", r.URL.Query().Get("token"), r.RemoteAddr)
+		w.WriteHeader(401)
+		fmt.Fprint(w, "💔 Unable to handle your request")
+	}
+}
 
-	request_path := r.URL.Path[len("/"):]
+func handleFileRequest(w http.ResponseWriter, r *http.Request) {
+
+	request_path := r.URL.Path[1:]
 	file_path := viper.GetString("ContentDir") + path.Clean(request_path)
 
-	if len(request_path) > 0 {
+	_, err := os.OpenFile(file_path, os.O_RDONLY, 0644)
+	if os.IsNotExist(err) {
+		log.Printf("Error 404: %v", err)
+		if len(viper.GetString("ContentFileExtension")) > 0 {
 
-		if request_path == viper.GetString("HTTP_SERVER_SYNC_HANDLER") {
-			if r.URL.Query().Get("token") == viper.GetString("NRTK_API_TOKEN") {
-				log.Printf("Sync signal recieved from %v", r.RemoteAddr)
-				w.WriteHeader(200)
-				fmt.Fprint(w, "👋 Sync signal recieved")
-				sync()
+			file_path_extension := file_path + viper.GetString("ContentFileExtension")
+			_, err_extension := os.OpenFile(file_path_extension, os.O_RDONLY, 0644)
+
+			if os.IsNotExist(err_extension) {
+				log.Printf("Fallback Error 404: %v", err_extension)
+				http.ServeFile(w, r, viper.GetString("ContentDir")+"/404"+viper.GetString("ContentFileExtension"))
 			} else {
-				log.Printf("Invalid sync token %v recieved from %v", r.URL.Query().Get("token"), r.RemoteAddr)
-				w.WriteHeader(401)
-				fmt.Fprint(w, "💔 Unable to handle your request")
+				log.Printf("Serving %v on behalf of %v", file_path_extension, r.URL.Path)
+				http.ServeFile(w, r, file_path_extension)
 			}
 
 		} else {
+			http.ServeFile(w, r, viper.GetString("ContentDir")+"/404")
+		}
 
-			_, err := os.OpenFile(file_path, os.O_RDONLY, 0644)
-			if os.IsNotExist(err) {
-				log.Printf("Error 404: %v", err)
-				if len(viper.GetString("ContentFileExtension")) > 0 {
+	} else {
 
-					file_path_extension := viper.GetString("ContentDir") + request_path + viper.GetString("ContentFileExtension")
-					_, err_extension := os.OpenFile(file_path_extension, os.O_RDONLY, 0644)
+		http.ServeFile(w, r, file_path)
+	}
+}
 
-					if os.IsNotExist(err_extension) {
-						log.Printf("Error 404: %v", err_extension)
-						http.ServeFile(w, r, viper.GetString("ContentDir")+"/404"+viper.GetString("ContentFileExtension"))
-					} else {
-						http.ServeFile(w, r, file_path_extension)
-					}
+func requestHandler(w http.ResponseWriter, r *http.Request) {
 
-				} else {
-					http.ServeFile(w, r, viper.GetString("ContentDir")+"/404")
-				}
+	log.Printf("Handling %v from %v", r.URL.Path, r.RemoteAddr)
 
-			} else {
-				http.ServeFile(w, r, file_path)
-			}
+	if r.URL.Path != "/" {
 
+		if r.URL.Path == viper.GetString("HTTP_SERVER_SYNC_HANDLER") {
+			handleSyncRequest(w, r)
+		} else {
+			handleFileRequest(w, r)
 		}
 
 	} else {
