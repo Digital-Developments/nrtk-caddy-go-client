@@ -182,7 +182,7 @@ func read_json_file(filePath string) ([]byte, error) {
 func fetch_remote(url, token string) ([]byte, error) {
 
 	apiClient := http.Client{
-		Timeout: time.Second * 2, // Timeout after 2 seconds
+		Timeout: time.Second * 20, // Timeout after 2 seconds
 	}
 
 	log.Printf("Fetching data from %v\n", url)
@@ -192,16 +192,18 @@ func fetch_remote(url, token string) ([]byte, error) {
 		return nil, errors.New("HTTP Error")
 	}
 
-	req.Header.Set("User-Agent", "NRTK SyncGo v0.1")
+	req.Header.Set("User-Agent", "NRTK Sync Go Client v0.1")
 	req.Header.Set("Authorization", fmt.Sprintf("Token %v", token))
 
 	response, getErr := apiClient.Do(req)
-	if getErr != nil || response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("request Error: %v", response.StatusCode)
-	}
 
-	if response.Body != nil {
-		defer response.Body.Close()
+	if getErr != nil {
+		return nil, fmt.Errorf("request error: %v", getErr)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("request error: %v", response.StatusCode)
 	}
 
 	body, readErr := io.ReadAll(response.Body)
@@ -430,8 +432,9 @@ func main() {
 	viper.SetDefault("API_URL", "https://newsroomtoolkit.com/nrtk-api/project/a8f3433d-3b0c-4651-abaf-bcfdb95c12c8/")
 	viper.SetDefault("API_TOKEN", "1a1b0a2de7529433d86df29f4b3ab427c5389540")
 	viper.SetDefault("STORY_EXTENSION", ".html")
-	viper.SetDefault("HTTP_SERVER_ENABLED", false)
+	viper.SetDefault("HTTP_SERVER_ENABLED", 0)
 	viper.SetDefault("HTTP_SERVER_PORT", 0)
+	viper.SetDefault("HTTP_SERVER_SYNC_HANDLER", "/.nrtk-sync")
 	viper.SetDefault("MODE_INFINITY", 0)
 	viper.SetDefault("MODE_FETCH_LOCAL", 0)
 	viper.SetDefault("MODE_FORCE_UPDATE", 0)
