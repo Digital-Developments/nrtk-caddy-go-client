@@ -360,6 +360,8 @@ func requestHandler(w http.ResponseWriter, r *http.Request) {
 	ignoreURLs := map[string]bool{
 		"/favicon.ico": true,
 		"/robots.txt":  true,
+		"/config/":     true,
+		"/.git/config": true,
 	}
 
 	if ignoreURLs[r.URL.Path] {
