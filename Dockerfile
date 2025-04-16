@@ -7,18 +7,15 @@ LABEL app.nrtk-client-go.release-date="2025-04-13"
 WORKDIR /app
 ARG TARGETOS TARGETARCH
 ENV CGO_ENABLED=0
-ENV HTTP_SERVER_PORT=8080
 
 COPY go.mod ./
 COPY go.sum ./
+COPY main.go ./
 
 RUN go mod download
 
-COPY *.go ./
-COPY .env ./
-
-RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /app/nrtk-client-go
+RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /app/nrtk-client
 
 EXPOSE $HTTP_SERVER_PORT
 
-CMD [ "/app/nrtk-client-go" ]
+CMD [ "/app/nrtk-client" ]

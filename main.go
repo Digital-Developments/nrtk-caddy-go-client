@@ -64,7 +64,7 @@ func (s *Story) GetSitemapItem() string {
 }
 
 func (s Story) GetFilePath() string {
-	return fmt.Sprintf("%v%v%v", viper.GetString("ContentDir"), s.Anchor, viper.GetString("ContentFileExtension"))
+	return fmt.Sprintf("%v%v%v", viper.GetString("ContentDir"), s.Anchor, viper.GetString("STORY_EXTENSION"))
 }
 
 func (s Story) GetContent() []byte {
@@ -122,11 +122,13 @@ func (m *MetaObject) IsUpdateNeeded() (bool, error) {
 	local_json, err := read_json_file(viper.GetString("MetaPath"))
 
 	if err != nil {
+		log.Printf("Unable to read meta at %v", viper.GetString("MetaPath"))
 		return true, err
 	} else {
 		current_meta := MetaObject{}
 		jsonErr := json.Unmarshal(local_json, &current_meta)
 		if jsonErr != nil {
+			log.Printf("Invalid meta data at %v", viper.GetString("MetaPath"))
 			return true, jsonErr
 		} else {
 			current_meta.IsExpired = current_meta.Checksum != m.Checksum
@@ -292,7 +294,7 @@ func parse(api_response []byte) {
 		}
 
 		error_page := ContentFile{
-			FileName: "404" + viper.GetString("ContentFileExtension"),
+			FileName: "404" + viper.GetString("STORY_EXTENSION"),
 			Content:  sync_data.ErrorPage,
 		}
 		SaveFile(error_page)
@@ -310,7 +312,7 @@ func parse(api_response []byte) {
 }
 
 func handleSyncRequest(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("token") == viper.GetString("NRTK_API_TOKEN") {
+	if r.URL.Query().Get("token") == viper.GetString("API_TOKEN") {
 		log.Printf("Sync signal recieved from %v", r.RemoteAddr)
 		w.WriteHeader(200)
 		fmt.Fprint(w, "👋 Sync signal recieved")
@@ -330,14 +332,14 @@ func handleFileRequest(w http.ResponseWriter, r *http.Request) {
 	_, err := os.OpenFile(file_path, os.O_RDONLY, 0644)
 	if os.IsNotExist(err) {
 		log.Printf("Error 404: %v", err)
-		if len(viper.GetString("ContentFileExtension")) > 0 {
+		if len(viper.GetString("STORY_EXTENSION")) > 0 {
 
-			file_path_extension := file_path + viper.GetString("ContentFileExtension")
+			file_path_extension := file_path + viper.GetString("STORY_EXTENSION")
 			_, err_extension := os.OpenFile(file_path_extension, os.O_RDONLY, 0644)
 
 			if os.IsNotExist(err_extension) {
 				log.Printf("Fallback Error 404: %v", err_extension)
-				http.ServeFile(w, r, viper.GetString("ContentDir")+"/404"+viper.GetString("ContentFileExtension"))
+				http.ServeFile(w, r, viper.GetString("ContentDir")+"/404"+viper.GetString("STORY_EXTENSION"))
 			} else {
 				log.Printf("Serving %v on behalf of %v", file_path_extension, r.URL.Path)
 				http.ServeFile(w, r, file_path_extension)
@@ -375,7 +377,7 @@ func requestHandler(w http.ResponseWriter, r *http.Request) {
 			}
 
 		} else {
-			http.ServeFile(w, r, viper.GetString("ContentDir")+"/index"+viper.GetString("ContentFileExtension"))
+			http.ServeFile(w, r, viper.GetString("ContentDir")+"/index"+viper.GetString("STORY_EXTENSION"))
 		}
 	}
 }
@@ -395,8 +397,8 @@ func sync() {
 	var api_response []byte
 	var fetchError error
 
-	if !viper.GetBool("MODE_FETCH_LOCAL") && len(viper.GetString("NRTK_API_TOKEN")) > 0 {
-		api_response, fetchError = fetch_remote(viper.GetString("NRTK_API_URL"), viper.GetString("NRTK_API_TOKEN"))
+	if !viper.GetBool("MODE_FETCH_LOCAL") && len(viper.GetString("API_TOKEN")) > 0 {
+		api_response, fetchError = fetch_remote(viper.GetString("API_URL"), viper.GetString("API_TOKEN"))
 	} else {
 		api_response, fetchError = read_json_file("local.json")
 	}
@@ -410,29 +412,38 @@ func sync() {
 
 func main() {
 
+	viper.SetEnvPrefix("NRTK")
+	viper.BindEnv("HOST_NAME")
+	viper.BindEnv("APP_NAME")
+	viper.BindEnv("API_URL")
+	viper.BindEnv("API_TOKEN")
+	viper.BindEnv("HTTP_SERVER_ENABLED")
+	viper.BindEnv("HTTP_SERVER_PORT")
+	viper.BindEnv("STORY_EXTENSION")
+	viper.BindEnv("MODE_INFINITY")
+	viper.BindEnv("MODE_FETCH_LOCAL")
+	viper.BindEnv("MODE_FORCE_UPDATE")
+
 	viper.SetDefault("APP_NAME", ".nrtk")
-	viper.SetDefault("ContentFileExtension", "")
-	viper.SetDefault("HTTP_SERVER_PORT", os.Getenv("HTTP_SERVER_PORT"))
+	viper.SetDefault("API_URL", "https://newsroomtoolkit.com/nrtk-api/project/a8f3433d-3b0c-4651-abaf-bcfdb95c12c8/")
+	viper.SetDefault("API_TOKEN", "1a1b0a2de7529433d86df29f4b3ab427c5389540")
+	viper.SetDefault("STORY_EXTENSION", ".html")
+	viper.SetDefault("HTTP_SERVER_ENABLED", false)
+	viper.SetDefault("HTTP_SERVER_PORT", 0)
+	viper.SetDefault("MODE_INFINITY", 0)
+	viper.SetDefault("MODE_FETCH_LOCAL", 0)
+	viper.SetDefault("MODE_FORCE_UPDATE", 0)
 
 	log.SetPrefix("nrtk-sync: ")
 	log.SetFlags(0)
 
-	viper.SetConfigName(".env")
-	viper.SetConfigType("env")
-	viper.AddConfigPath(".")
-
-	err := viper.ReadInConfig()
-	if err != nil {
-		panic(fmt.Errorf("fatal error config file: %w", err))
+	if !viper.GetBool("MODE_FETCH_LOCAL") && len(viper.GetString("API_TOKEN")) == 0 {
+		panic("fatal error: local mode disabled while no token provided")
 	}
 
 	viper.Set("ContentDir", viper.GetString("APP_NAME")+"/www/")
 	viper.Set("SnapshotDir", viper.GetString("APP_NAME")+"/snapshot/")
 	viper.Set("MetaPath", viper.GetString("APP_NAME")+"/meta.json")
-
-	if viper.GetBool("ADD_HTML_EXTENSION") {
-		viper.Set("ContentFileExtension", ".html")
-	}
 
 	if viper.GetBool("HTTP_SERVER_ENABLED") && viper.GetInt("HTTP_SERVER_PORT") > 0 {
 		sync()
