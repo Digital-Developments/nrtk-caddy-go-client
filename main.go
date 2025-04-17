@@ -179,12 +179,12 @@ func read_json_file(filePath string) ([]byte, error) {
 	return byteValue, nil
 }
 
-func fetch_remote(url, token string) ([]byte, error) {
+func fetch_remote(host_uuid, token string) ([]byte, error) {
 
 	apiClient := http.Client{
 		Timeout: time.Second * 20, // Timeout after 2 seconds
 	}
-
+	url := fmt.Sprintf("https://newsroomtoolkit.com/nrtk-api/project/%v/", host_uuid)
 	log.Printf("Fetching data from %v\n", url)
 
 	req, err := http.NewRequest(http.MethodGet, url, nil)
@@ -402,7 +402,7 @@ func sync() {
 	var fetchError error
 
 	if !viper.GetBool("MODE_FETCH_LOCAL") && len(viper.GetString("API_TOKEN")) > 0 {
-		api_response, fetchError = fetch_remote(viper.GetString("API_URL"), viper.GetString("API_TOKEN"))
+		api_response, fetchError = fetch_remote(viper.GetString("API_UUID"), viper.GetString("API_TOKEN"))
 	} else {
 		api_response, fetchError = read_json_file("local.json")
 	}
@@ -416,10 +416,13 @@ func sync() {
 
 func main() {
 
+	log.SetPrefix("nrtk-sync: ")
+	log.SetFlags(0)
+
 	viper.SetEnvPrefix("NRTK")
 	viper.BindEnv("HOST_NAME")
 	viper.BindEnv("APP_NAME")
-	viper.BindEnv("API_URL")
+	viper.BindEnv("API_UUID")
 	viper.BindEnv("API_TOKEN")
 	viper.BindEnv("HTTP_SERVER_ENABLED")
 	viper.BindEnv("HTTP_SERVER_PORT")
@@ -429,18 +432,26 @@ func main() {
 	viper.BindEnv("MODE_FORCE_UPDATE")
 
 	viper.SetDefault("APP_NAME", ".nrtk")
-	viper.SetDefault("API_URL", "https://newsroomtoolkit.com/nrtk-api/project/a8f3433d-3b0c-4651-abaf-bcfdb95c12c8/")
-	viper.SetDefault("API_TOKEN", "1a1b0a2de7529433d86df29f4b3ab427c5389540")
 	viper.SetDefault("STORY_EXTENSION", ".html")
 	viper.SetDefault("HTTP_SERVER_ENABLED", 0)
-	viper.SetDefault("HTTP_SERVER_PORT", 0)
+	viper.SetDefault("HTTP_SERVER_PORT", 8080)
 	viper.SetDefault("HTTP_SERVER_SYNC_HANDLER", "/.nrtk-sync")
 	viper.SetDefault("MODE_INFINITY", 0)
 	viper.SetDefault("MODE_FETCH_LOCAL", 0)
 	viper.SetDefault("MODE_FORCE_UPDATE", 0)
 
-	log.SetPrefix("nrtk-sync: ")
-	log.SetFlags(0)
+	log.Printf("Init %v App Instance", viper.GetString("APP_NAME"))
+
+	viper.SetConfigName(".env")
+	viper.SetConfigType("env")
+	viper.AddConfigPath(".")
+
+	err := viper.ReadInConfig()
+	if err != nil {
+		log.Printf("Unable to read config from .env: %v", err)
+	} else {
+		log.Printf("Overriding Envs from .env")
+	}
 
 	if !viper.GetBool("MODE_FETCH_LOCAL") && len(viper.GetString("API_TOKEN")) == 0 {
 		panic("fatal error: local mode disabled while no token provided")
