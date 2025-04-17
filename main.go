@@ -400,18 +400,24 @@ func start_server() {
 func sync() {
 	var api_response []byte
 	var fetchError error
+	var localJsonError error
 
 	if !viper.GetBool("MODE_FETCH_LOCAL") && len(viper.GetString("API_TOKEN")) > 0 {
 		api_response, fetchError = fetch_remote(viper.GetString("API_UUID"), viper.GetString("API_TOKEN"))
 	} else {
-		api_response, fetchError = read_json_file("local.json")
+		api_response, localJsonError = read_json_file("local.json")
 	}
 
 	if fetchError != nil {
 		panic(fetchError)
 	} else {
-		parse(api_response)
+		if localJsonError != nil {
+			log.Printf("Unable to read data from local.json")
+		} else {
+			parse(api_response)
+		}
 	}
+
 }
 
 func main() {
@@ -440,22 +446,27 @@ func main() {
 	viper.SetDefault("MODE_FETCH_LOCAL", 0)
 	viper.SetDefault("MODE_FORCE_UPDATE", 0)
 
-	log.Printf("Init %v App Instance", viper.GetString("APP_NAME"))
+	is_env_file, _ := os.LookupEnv("NRTK_DOT_ENV")
 
-	viper.SetConfigName(".env")
-	viper.SetConfigType("env")
-	viper.AddConfigPath(".")
+	if is_env_file == "1" {
 
-	err := viper.ReadInConfig()
-	if err != nil {
-		log.Printf("Unable to read config from .env: %v", err)
-	} else {
-		log.Printf("Overriding Envs from .env")
+		viper.SetConfigName(".env")
+		viper.SetConfigType("env")
+		viper.AddConfigPath(".")
+
+		err := viper.ReadInConfig()
+		if err != nil {
+			log.Printf("Unable to read config from .env: %v", err)
+		} else {
+			log.Printf("Overriding Envs from .env")
+		}
 	}
 
-	if !viper.GetBool("MODE_FETCH_LOCAL") && len(viper.GetString("API_TOKEN")) == 0 {
-		panic("fatal error: local mode disabled while no token provided")
-	}
+	log.Printf("Init %v App Istance", viper.GetString("APP_NAME"))
+
+	//if !viper.GetBool("MODE_FETCH_LOCAL") && len(viper.GetString("API_TOKEN")) == 0 {
+	//	panic("fatal error: local mode disabled while no token provided")
+	//}
 
 	viper.Set("ContentDir", viper.GetString("APP_NAME")+"/www/")
 	viper.Set("SnapshotDir", viper.GetString("APP_NAME")+"/snapshot/")
