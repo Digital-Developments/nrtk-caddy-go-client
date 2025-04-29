@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"regexp"
 	"time"
 
 	"github.com/spf13/viper"
@@ -64,7 +65,7 @@ func (s *Story) GetSitemapItem() string {
 }
 
 func (s Story) GetFilePath() string {
-	return fmt.Sprintf("%v%v%v", viper.GetString("ContentDir"), s.Anchor, viper.GetString("STORY_EXTENSION"))
+	return path.Join(viper.GetString("ContentDir"), s.Anchor+storyExtension())
 }
 
 func (s Story) GetContent() []byte {
@@ -77,7 +78,7 @@ type ContentFile struct {
 }
 
 func (f ContentFile) GetFilePath() string {
-	return fmt.Sprintf("%v%v", viper.GetString("ContentDir"), f.FileName)
+	return path.Join(viper.GetString("ContentDir"), f.FileName)
 }
 
 func (f ContentFile) GetContent() []byte {
@@ -242,7 +243,7 @@ func empty_content_dir() error {
 
 	for _, f := range files {
 
-		e := os.Remove(viper.GetString("ContentDir") + "/" + f.Name())
+		e := os.Remove(path.Join(viper.GetString("ContentDir"), "/", f.Name()))
 		if e != nil {
 			return e
 		}
@@ -296,7 +297,7 @@ func parse(api_response []byte) {
 		}
 
 		error_page := ContentFile{
-			FileName: "404" + viper.GetString("STORY_EXTENSION"),
+			FileName: "404" + storyExtension(),
 			Content:  sync_data.ErrorPage,
 		}
 		SaveFile(error_page)
@@ -328,27 +329,28 @@ func handleSyncRequest(w http.ResponseWriter, r *http.Request) {
 
 func handleFileRequest(w http.ResponseWriter, r *http.Request) {
 
+	story_extension := storyExtension()
 	request_path := r.URL.Path[1:]
-	file_path := viper.GetString("ContentDir") + path.Clean(request_path)
+	file_path := path.Join(viper.GetString("ContentDir"), path.Clean(request_path))
 
 	_, err := os.OpenFile(file_path, os.O_RDONLY, 0644)
 	if os.IsNotExist(err) {
 		log.Printf("Error 404: %v", err)
-		if len(viper.GetString("STORY_EXTENSION")) > 0 {
+		if len(story_extension) > 0 {
 
-			file_path_extension := file_path + viper.GetString("STORY_EXTENSION")
+			file_path_extension := path.Join(viper.GetString("ContentDir"), path.Clean(request_path)+story_extension)
 			_, err_extension := os.OpenFile(file_path_extension, os.O_RDONLY, 0644)
 
 			if os.IsNotExist(err_extension) {
-				log.Printf("Fallback Error 404: %v", err_extension)
-				http.ServeFile(w, r, viper.GetString("ContentDir")+"/404"+viper.GetString("STORY_EXTENSION"))
+				log.Printf("Fallback File Error 404: %v", err_extension)
+				http.ServeFile(w, r, path.Join(viper.GetString("ContentDir"), "/404"+story_extension))
 			} else {
 				log.Printf("Serving %v on behalf of %v", file_path_extension, r.URL.Path)
 				http.ServeFile(w, r, file_path_extension)
 			}
 
 		} else {
-			http.ServeFile(w, r, viper.GetString("ContentDir")+"/404")
+			http.ServeFile(w, r, path.Join(viper.GetString("ContentDir"), "/404"))
 		}
 
 	} else {
@@ -381,9 +383,19 @@ func requestHandler(w http.ResponseWriter, r *http.Request) {
 			}
 
 		} else {
-			http.ServeFile(w, r, viper.GetString("ContentDir")+"/index"+viper.GetString("STORY_EXTENSION"))
+			http.ServeFile(w, r, path.Join(viper.GetString("ContentDir"), "/index"+storyExtension()))
 		}
 	}
+}
+
+func storyExtension() string {
+	if len(viper.GetString("STORY_EXTENSION")) > 0 {
+		if match, _ := regexp.MatchString("([a-z]{1,})", viper.GetString("STORY_EXTENSION")); match {
+			return "." + viper.GetString("STORY_EXTENSION")
+		}
+	}
+
+	return ""
 }
 
 func start_server() {
@@ -438,7 +450,7 @@ func main() {
 	viper.BindEnv("MODE_FORCE_UPDATE")
 
 	viper.SetDefault("APP_NAME", ".nrtk")
-	viper.SetDefault("STORY_EXTENSION", ".html")
+	viper.SetDefault("STORY_EXTENSION", "html")
 	viper.SetDefault("HTTP_SERVER_ENABLED", 0)
 	viper.SetDefault("HTTP_SERVER_PORT", 8080)
 	viper.SetDefault("HTTP_SERVER_SYNC_HANDLER", "/.nrtk-sync")
@@ -468,9 +480,9 @@ func main() {
 	//	panic("fatal error: local mode disabled while no token provided")
 	//}
 
-	viper.Set("ContentDir", viper.GetString("APP_NAME")+"/www/")
-	viper.Set("SnapshotDir", viper.GetString("APP_NAME")+"/snapshot/")
-	viper.Set("MetaPath", viper.GetString("APP_NAME")+"/meta.json")
+	viper.Set("ContentDir", path.Join(viper.GetString("APP_NAME"), "/www/"))
+	viper.Set("SnapshotDir", path.Join(viper.GetString("APP_NAME"), "/snapshot/"))
+	viper.Set("MetaPath", path.Join(viper.GetString("APP_NAME"), "/meta.json"))
 
 	if viper.GetBool("HTTP_SERVER_ENABLED") && viper.GetInt("HTTP_SERVER_PORT") > 0 {
 		sync()
